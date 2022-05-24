@@ -1,7 +1,7 @@
 from sklearn.base import BaseEstimator, TransformerMixin
 import pandas as pd
 
-from .utils import haversine_vectorized
+from TaxiFareModel.utils import haversine_vectorized
 
 
 

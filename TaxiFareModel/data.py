@@ -24,7 +24,6 @@ def clean_data(df, test=False):
     df = df[df["dropoff_longitude"].between(left=-74, right=-72.9)]
     return df
 
-
 if __name__ == '__main__':
     df = get_data()
     print(df.head())

@@ -1,0 +1,15 @@
+artifact_uri: file:///Users/ivanthung/code/ivanthung/TaxiFareModel/mlruns/1/ef326b13e16d4ae38fba72990b3f56a8/artifacts
+end_time: null
+entry_point_name: ''
+experiment_id: '1'
+lifecycle_stage: active
+name: ''
+run_id: ef326b13e16d4ae38fba72990b3f56a8
+run_uuid: ef326b13e16d4ae38fba72990b3f56a8
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1653395254290
+status: 1
+tags: []
+user_id: unknown
