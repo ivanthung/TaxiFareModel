@@ -1,13 +1,9 @@
 import joblib
+import TaxiFareModel.featureng as fng
 from termcolor import colored
 import mlflow
 from TaxiFareModel.data import get_data, clean_data
-from TaxiFareModel.encoders import (
-    TimeFeaturesEncoder,
-    DistanceTransformer,
-    Optimizer,
-    AddGeohash,
-)
+from TaxiFareModel.encoders import Optimizer
 from TaxiFareModel.utils import compute_rmse, df_optimized
 from TaxiFareModel.globalparams import (
     EXPERIMENT_NAME,
@@ -17,22 +13,32 @@ from TaxiFareModel.globalparams import (
 )
 from memoized_property import memoized_property
 from mlflow.tracking import MlflowClient
-from sklearn.compose import ColumnTransformer, make_column_selector
+from sklearn.compose import ColumnTransformer
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
-from sklearn.pipeline import Pipeline, make_pipeline
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.pipeline import Pipeline
 from google.cloud import storage
 import numpy as np
 
 
 class Trainer(object):
-    def __init__(self, nrows=1000):
+    def __init__(self, **kwargs):
         """
         X: pandas DataFrame
         y: pandas Series
         """
-        self.df = get_data(nrows)
+        self.upload = kwargs.get("upload", False)
+        self.local = kwargs.get("local", True)
+        self.nrows = kwargs.get("nrows", 1000)
+        self.gridsearch = kwargs.get('gridsearch', False)
+        self.optimize = kwargs.get('optimize', True)
+        self.estimator = kwargs.get('optimizer', 'Linear')
+        self.mlflow = kwargs.get('mlflow', False),  # set to True to log params to mlflow
+        self.experiment_name = EXPERIMENT_NAME
+        self.pipeline_memory = kwargs.get('pipeline_memory', True)
+        self.distance_type = kwargs.get("distance_type", 'manhattan')
+
+        self.df = get_data(self.nrows)
         self.pipeline = None
         self.X = None
         self.y = None
@@ -40,8 +46,6 @@ class Trainer(object):
         self.y_train = None
         self.X_test = None
         self.y_test = None
-        # for MLFlow
-        self.experiment_name = EXPERIMENT_NAME
 
     def clean_split(self, split=0.3):
         self.df = clean_data(self.df)
@@ -58,25 +62,11 @@ class Trainer(object):
 
     def set_pipeline(self):
         """defines the pipeline as a class attribute"""
-        dist_pipe = Pipeline(
-            [("dist_trans", DistanceTransformer()), ("stdscaler", StandardScaler())]
-        )
-        time_pipe = Pipeline(
-            [
-                ("time_enc", TimeFeaturesEncoder("pickup_datetime")),
-                ("ohe", OneHotEncoder(handle_unknown="ignore")),
-            ]
-        )
-
-        geohash_pipe = make_pipeline(
-            AddGeohash(precision=5), OneHotEncoder(handle_unknown="ignore", sparse=True)
-        )
-
         preproc_pipe = ColumnTransformer(
             [
                 (
                     "distance",
-                    dist_pipe,
+                    fng.dist_pipe,
                     [
                         "pickup_latitude",
                         "pickup_longitude",
@@ -84,7 +74,7 @@ class Trainer(object):
                         "dropoff_longitude",
                     ],
                 ),
-                ("time", time_pipe, ["pickup_datetime"]),
+                ("time", fng.time_pipe, ["pickup_datetime"]),
             ],
             remainder="drop",
         )
@@ -185,6 +175,6 @@ if __name__ == "__main__":
     trainer.set_experiment_name("xp2")
     trainer.fit()
     rmse = trainer.evaluate()
+    trainer.save_model()
 
     print(f"rmse: {rmse}")
-    # trainer.save_model()
