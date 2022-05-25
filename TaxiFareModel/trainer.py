@@ -17,7 +17,7 @@ from sklearn.compose import ColumnTransformer, make_column_transformer
 from sklearn.linear_model import LinearRegression, SGDRegressor
 from sklearn.tree import DecisionTreeRegressor
 from xgboost import XGBRegressor
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.pipeline import Pipeline, make_pipeline
 from google.cloud import storage
 import numpy as np
@@ -40,6 +40,7 @@ class Trainer(object):
         self.experiment_name = EXPERIMENT_NAME
         self.pipeline_memory = kwargs.get('pipeline_memory', True)
         self.distance_type = kwargs.get("distance_type", 'manhattan')
+        self.n_jobs = kwargs.get('n_jobs', -1)
 
         self.df = get_data(self.nrows, self.local)
         self.pipeline = None
@@ -64,6 +65,7 @@ class Trainer(object):
         self.experiment_name = experiment_name
 
     def create_estimator(self):
+        """ Creates estimator and implements grid search for params if requested"""
         estimators = {
             'linear' : LinearRegression(),
             'xgboost': XGBRegressor(),
@@ -72,11 +74,12 @@ class Trainer(object):
             }
 
         estimator = estimators.get(self.estimator)
+        estimator.set_params(n_jobs=self.n_jobs)
         print(f"..setting up {self.estimator} as estimator")
         return estimator
 
     def set_pipeline(self):
-        """defines the pipeline as a class attribute"""
+        """Defines the pipeline as a class attribute, takes params from self"""
 
         prepro_dc = {
             'distance' : (fng.dist_pipe, ["pickup_latitude","pickup_longitude","dropoff_latitude","dropoff_longitude"]),
@@ -86,12 +89,13 @@ class Trainer(object):
 
         feat_eng = [(feat,) + prepro_dc[feat] for feat in self.feateng if feat in prepro_dc.keys()]
         preproc_pipe = ColumnTransformer(feat_eng, remainder="drop")
+
         self.pipeline = Pipeline(
             [
                 ("preproc", preproc_pipe),
                 ("optimizer", Optimizer()) if self.optimize else ('', None),
                 (self.estimator, self.create_estimator()),
-            ]
+            ], memory=self.pipeline_memory
         )
 
     def fit(self):
@@ -113,8 +117,7 @@ class Trainer(object):
         blob.upload_from_filename("model.joblib")
 
     def save_model(self):
-        """method that saves the model into a .joblib file and uploads it on Google Storage /models folder
-        HINTS : use joblib library and google-cloud-storage"""
+        """method that saves the model into a .joblib file and uploads it on Google Storage /models folder"""
 
         # saving the trained model to disk is mandatory to then beeing able to upload it to storage
         # Implement here
@@ -162,7 +165,7 @@ if __name__ == "__main__":
         upload=False,
         local=True,  # set to False to get data from GCP (Storage or BigQuery)
         gridsearch=False,
-        optimize=False,
+        optimize=True,
         estimator="xgboost",
         mlflow=True,  # set to True to log params to mlflow
         experiment_name=EXPERIMENT_NAME,
