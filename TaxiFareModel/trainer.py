@@ -13,10 +13,12 @@ from TaxiFareModel.globalparams import (
 )
 from memoized_property import memoized_property
 from mlflow.tracking import MlflowClient
-from sklearn.compose import ColumnTransformer
-from sklearn.linear_model import LinearRegression
+from sklearn.compose import ColumnTransformer, make_column_transformer
+from sklearn.linear_model import LinearRegression, SGDRegressor
+from sklearn.tree import DecisionTreeRegressor
+from xgboost import XGBRegressor
 from sklearn.model_selection import train_test_split
-from sklearn.pipeline import Pipeline
+from sklearn.pipeline import Pipeline, make_pipeline
 from google.cloud import storage
 import numpy as np
 
@@ -30,15 +32,16 @@ class Trainer(object):
         self.upload = kwargs.get("upload", False)
         self.local = kwargs.get("local", True)
         self.nrows = kwargs.get("nrows", 1000)
+        self.feateng = kwargs.get('feateng', ['distance', 'time'])
         self.gridsearch = kwargs.get('gridsearch', False)
         self.optimize = kwargs.get('optimize', True)
-        self.estimator = kwargs.get('optimizer', 'Linear')
+        self.estimator = kwargs.get('estimator', 'linear')
         self.mlflow = kwargs.get('mlflow', False),  # set to True to log params to mlflow
         self.experiment_name = EXPERIMENT_NAME
         self.pipeline_memory = kwargs.get('pipeline_memory', True)
         self.distance_type = kwargs.get("distance_type", 'manhattan')
 
-        self.df = get_data(self.nrows)
+        self.df = get_data(self.nrows, self.local)
         self.pipeline = None
         self.X = None
         self.y = None
@@ -49,7 +52,7 @@ class Trainer(object):
 
     def clean_split(self, split=0.3):
         self.df = clean_data(self.df)
-        self.df = df_optimized(self.df)
+        self.df = df_optimized(self.df) if self.optimize else self.df
         self.y = self.df["fare_amount"]
         self.X = self.df.drop("fare_amount", axis=1)
         self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
@@ -60,36 +63,40 @@ class Trainer(object):
         """defines the experiment name for MLFlow"""
         self.experiment_name = experiment_name
 
+    def create_estimator(self):
+        estimators = {
+            'linear' : LinearRegression(),
+            'xgboost': XGBRegressor(),
+            'decisiontree' : DecisionTreeRegressor(),
+            'sgdregresseor' : SGDRegressor()
+            }
+
+        estimator = estimators.get(self.estimator)
+        print(f"..setting up {self.estimator} as estimator")
+        return estimator
+
     def set_pipeline(self):
         """defines the pipeline as a class attribute"""
-        preproc_pipe = ColumnTransformer(
-            [
-                (
-                    "distance",
-                    fng.dist_pipe,
-                    [
-                        "pickup_latitude",
-                        "pickup_longitude",
-                        "dropoff_latitude",
-                        "dropoff_longitude",
-                    ],
-                ),
-                ("time", fng.time_pipe, ["pickup_datetime"]),
-            ],
-            remainder="drop",
-        )
 
+        prepro_dc = {
+            'distance' : (fng.dist_pipe, ["pickup_latitude","pickup_longitude","dropoff_latitude","dropoff_longitude"]),
+            'time' : (fng.time_pipe, ["pickup_datetime"]),
+            'geohash' : (fng.geohash_pipe, ["pickup_latitude","pickup_longitude","dropoff_latitude","dropoff_longitude"])
+        }
+
+        feat_eng = [(feat,) + prepro_dc[feat] for feat in self.feateng if feat in prepro_dc.keys()]
+        preproc_pipe = ColumnTransformer(feat_eng, remainder="drop")
         self.pipeline = Pipeline(
             [
                 ("preproc", preproc_pipe),
-                ("optimizer", Optimizer()),
-                ("linear_model", LinearRegression()),
+                ("optimizer", Optimizer()) if self.optimize else ('', None),
+                (self.estimator, self.create_estimator()),
             ]
         )
 
     def fit(self):
         self.set_pipeline()
-        self.mlflow_log_param("model", "Linear")
+        self.mlflow_log_param("model", self.estimator)
         self.pipeline.fit(self.X, self.y)
 
     def evaluate(self):
@@ -115,10 +122,11 @@ class Trainer(object):
         print("saved model.joblib locally")
 
         # Implement here
-        self.upload_model_to_gcp()
-        print(
-            f"uploaded model.joblib to gcp cloud storage under \n => {STORAGE_LOCATION}"
-        )
+        if self.upload:
+            self.upload_model_to_gcp()
+            print(
+                f"uploaded model.joblib to gcp cloud storage under \n => {STORAGE_LOCATION}"
+            )
 
     # MLFlow methods
     @memoized_property
@@ -150,11 +158,11 @@ if __name__ == "__main__":
     # Get and clean data
     # Train and save model, locally and
     params = dict(
-        nrows=10000,
-        upload=True,
-        local=False,  # set to False to get data from GCP (Storage or BigQuery)
+        nrows=1000,
+        upload=False,
+        local=True,  # set to False to get data from GCP (Storage or BigQuery)
         gridsearch=False,
-        optimize=True,
+        optimize=False,
         estimator="xgboost",
         mlflow=True,  # set to True to log params to mlflow
         experiment_name=EXPERIMENT_NAME,
@@ -164,15 +172,14 @@ if __name__ == "__main__":
             "distance_to_center",
             "direction",
             "distance",
-            "time_features",
-            "geohash",
+            "time",
+            "geohash"
         ],
         n_jobs=-1,
     )  # Try with njobs=1 and njobs = -1
 
-    trainer = Trainer(nrows=1000)
+    trainer = Trainer(**params)
     trainer.clean_split(split=0.3)
-    trainer.set_experiment_name("xp2")
     trainer.fit()
     rmse = trainer.evaluate()
     trainer.save_model()

@@ -3,15 +3,19 @@ import os
 from TaxiFareModel.globalparams import BUCKET_NAME, BUCKET_TRAIN_DATA_PATH
 
 
-AWS_BUCKET_PATH = "/../raw_data/train.csv"
+TRAIN_PATH = "/../raw_data/train.csv"
 PATH = os.path.dirname(os.path.realpath(__file__))
 
-
-def get_data(nrows=1000):
+def get_data(nrows=1000, local = True):
     """method to get the training data (or a portion of it) from google cloud bucket"""
+    if local:
+        print(f"..loading {nrows} rows from {PATH}{TRAIN_PATH}")
+        df = pd.read_csv(PATH + TRAIN_PATH, nrows=nrows)
+        return df
+
+    print(f"#### loading {nrows} rows from {BUCKET_NAME}/{BUCKET_TRAIN_DATA_PATH}")
     df = pd.read_csv(f"gs://{BUCKET_NAME}/{BUCKET_TRAIN_DATA_PATH}", nrows=nrows)
     return df
-
 
 def clean_data(df, test=False):
     df = df.dropna(how="any", axis="rows")

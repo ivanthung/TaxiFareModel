@@ -82,7 +82,6 @@ class Optimizer(BaseEstimator, TransformerMixin):
         df_ = df_optimized(df_)
         return csr_matrix(df_.values)
 
-
 class AddGeohash(BaseEstimator, TransformerMixin):
     """
     Add a geohash (ex: "dr5rx") of len "precision" = 5 by default
@@ -97,16 +96,17 @@ class AddGeohash(BaseEstimator, TransformerMixin):
 
     def transform(self, X, y=None):
         assert isinstance(X, pd.DataFrame)
-        X["geohash_pickup"] = X.apply(
+        X_ = X.copy()
+        X_["geohash_pickup"] = X_.apply(
             lambda x: gh.encode(
                 x.pickup_latitude, x.pickup_longitude, precision=self.precision
             ),
             axis=1,
         )
-        X["geohash_dropoff"] = X.apply(
+        X_["geohash_dropoff"] = X_.apply(
             lambda x: gh.encode(
                 x.dropoff_latitude, x.dropoff_longitude, precision=self.precision
             ),
             axis=1,
         )
-        return X[["geohash_pickup", "geohash_dropoff"]]
+        return X_[["geohash_pickup", "geohash_dropoff"]]
