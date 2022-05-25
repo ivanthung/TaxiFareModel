@@ -1,13 +1,14 @@
 import pandas as pd
 import os
+from TaxiFareModel.globalparams import BUCKET_NAME, BUCKET_TRAIN_DATA_PATH
 
 
 AWS_BUCKET_PATH = "/../raw_data/train.csv"
 PATH = os.path.dirname(os.path.realpath(__file__))
 
-def get_data(nrows=10_000):
-    '''returns a DataFrame with nrows from s3 bucket'''
-    df = pd.read_csv(PATH + AWS_BUCKET_PATH, nrows=nrows)
+def get_data(nrows=1000):
+    """method to get the training data (or a portion of it) from google cloud bucket"""
+    df = pd.read_csv(f"gs://{BUCKET_NAME}/{BUCKET_TRAIN_DATA_PATH}", nrows=nrows)
     return df
 
 def clean_data(df, test=False):

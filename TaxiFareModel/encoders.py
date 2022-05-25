@@ -1,7 +1,8 @@
 from sklearn.base import BaseEstimator, TransformerMixin
 import pandas as pd
+from scipy.sparse import csr_matrix
 
-from TaxiFareModel.utils import haversine_vectorized
+from TaxiFareModel.utils import haversine_vectorized, df_optimized
 
 
 
@@ -60,3 +61,20 @@ class DistanceTransformer(BaseEstimator, TransformerMixin):
             end_lon=self.end_lon
         )
         return X_[['distance']]
+
+class Optimizer(BaseEstimator, TransformerMixin):
+    """
+        Optimzes the dataframe and returns
+    """
+
+    def __init__(self):
+        pass
+
+    def fit(self, X, y=None):
+        return self
+
+    def transform(self, X, y=None):
+        df = pd.DataFrame(X.toarray())
+        df_ = df.copy()
+        df_ = df_optimized(df_)
+        return csr_matrix(df_.values)
