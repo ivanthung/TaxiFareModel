@@ -1,10 +1,9 @@
 from sklearn.base import BaseEstimator, TransformerMixin
 import pandas as pd
 from scipy.sparse import csr_matrix
+import pygeohash as gh
 
 from TaxiFareModel.utils import haversine_vectorized, df_optimized
-
-
 
 class TimeFeaturesEncoder(BaseEstimator, TransformerMixin):
     """
@@ -78,3 +77,23 @@ class Optimizer(BaseEstimator, TransformerMixin):
         df_ = df.copy()
         df_ = df_optimized(df_)
         return csr_matrix(df_.values)
+
+class AddGeohash(BaseEstimator, TransformerMixin):
+    '''
+    Add a geohash (ex: "dr5rx") of len "precision" = 5 by default
+    corresponding to each (lon,lat) tuple, for pick-up, and drop-off
+    '''
+
+    def __init__(self, precision=5):
+        self.precision = precision
+
+    def fit(self, X, y=None):
+        return self
+
+    def transform(self, X, y=None):
+        assert isinstance(X, pd.DataFrame)
+        X['geohash_pickup'] = X.apply(
+            lambda x: gh.encode(x.pickup_latitude, x.pickup_longitude, precision=self.precision), axis=1)
+        X['geohash_dropoff'] = X.apply(
+            lambda x: gh.encode(x.dropoff_latitude, x.dropoff_longitude, precision=self.precision), axis=1)
+        return X[['geohash_pickup', 'geohash_dropoff']]

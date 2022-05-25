@@ -49,6 +49,5 @@ def df_optimized(df, verbose=True, **kwargs):
     GB = out_size / 1000000000
     if verbose:
         print("optimized size by {} % | {} GB".format(ratio, GB))
-        breakpoint()
 
     return df
